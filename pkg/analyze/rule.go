@@ -3,14 +3,69 @@ package analyze
 import (
 	"errors"
 	"fmt"
+	scyllav1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"reflect"
 	"strings"
 )
 
+type InterfaceIter = func() interface{}
+
+type Condition interface {
+	Evaluate(ds *DataSource) InterfaceIter
+	EvaluateOnResource(res interface{}) bool
+	Kind() string
+}
+
 type ResourceCondition struct {
-	Kind      string
+	ResKind   string
 	Condition fields.Selector
+}
+
+func (r *ResourceCondition) requirementMatches(obj interface{}, requirement fields.Requirement) bool {
+	it := GetFieldValueIterator(requirement.Field, obj)
+	val := it()
+	for val != nil && val.String() != requirement.Value {
+		val = it()
+	}
+	return val != nil
+}
+
+func (r *ResourceCondition) Evaluate(ds *DataSource) InterfaceIter {
+	return func() interface{} { return nil }
+}
+
+func (r *ResourceCondition) EvaluateOnResource(res interface{}) bool {
+	reqs := r.Condition.Requirements()
+	for _, req := range reqs {
+		if !r.requirementMatches(res, req) {
+			return false
+		}
+	}
+	return true
+}
+
+func (r *ResourceCondition) Kind() string {
+	return r.ResKind
+}
+
+type FunctionalCondition[T any] struct {
+	ResKind   string
+	Condition func(T) bool
+}
+
+func (r *FunctionalCondition[T]) Evaluate(ds *DataSource) InterfaceIter {
+	return func() interface{} { return nil }
+}
+
+func (r *FunctionalCondition[T]) EvaluateOnResource(res interface{}) bool {
+	return r.Condition(res.(T))
+}
+
+func (r *FunctionalCondition[T]) Kind() string {
+	//return reflect.TypeFor[T]().Name()
+	return r.ResKind
 }
 
 type Relation interface {
@@ -45,6 +100,15 @@ func (r *EqualFieldsRelation) EvaluateOn(a interface{}, b interface{}) (bool, er
 		}
 	}
 	return false, nil
+}
+
+type FunctionalEqualStringFieldsRelation[L, R any] struct {
+	LhsExtractor func(lhs L) string
+	RhsExtractor func(lhs R) string
+}
+
+func (f *FunctionalEqualStringFieldsRelation[L, R]) EvaluateOn(a interface{}, b interface{}) (bool, error) {
+	return f.LhsExtractor(a.(L)) == f.RhsExtractor(b.(R)), nil
 }
 
 func getFieldValueIterator(node reflect.Value, fields []string) func() *reflect.Value {
@@ -106,32 +170,49 @@ func GetFieldValueIterator(path string, obj interface{}) func() *reflect.Value {
 type Rule struct {
 	Diagnosis   string
 	Suggestions string
-	Resources   []ResourceCondition
+	Resources   []Condition
 	Relations   []resourceConnection
 }
 
 var CsiDriverMissing = Rule{
 	Diagnosis:   "local-csi-driver CSIDriver, referenced by <NAME> StorageClass, is missing",
 	Suggestions: "deploy local-csi-driver provisioner",
-	Resources: []ResourceCondition{
-		{
-			Kind: "ScyllaCluster",
-			Condition: fields.AndSelectors(
-				fields.ParseSelectorOrDie("Status.Conditions.Type=StatefulSetControllerProgressing"),
-				fields.ParseSelectorOrDie("Status.Conditions.Type=Progressing"),
-				fields.ParseSelectorOrDie("Spec.Datacenter.Racks.Storage.StorageClassName=scylladb-local-xfs")),
+	Resources: []Condition{
+		&FunctionalCondition[*scyllav1.ScyllaCluster]{
+			ResKind: "ScyllaCluster",
+			//fields.AndSelectors(
+			//	fields.ParseSelectorOrDie("Status.Conditions.Type=StatefulSetControllerProgressing"),
+			//	fields.ParseSelectorOrDie("Status.Conditions.Type=Progressing"),
+			//	fields.ParseSelectorOrDie("Spec.Datacenter.Racks.Storage.StorageClassName=scylladb-local-xfs"))
+			Condition: func(c *scyllav1.ScyllaCluster) bool {
+				storageClassXfs := false
+				conditionControllerProgressing := false
+				conditionProgressing := false
+				for _, rack := range c.Spec.Datacenter.Racks {
+					if *rack.Storage.StorageClassName == "scylladb-local-xfs" {
+						storageClassXfs = true
+					}
+				}
+				for _, cond := range c.Status.Conditions {
+					if cond.Type == "StatefulSetControllerProgressing" {
+						conditionControllerProgressing = true
+					} else if cond.Type == "Progressing" {
+						conditionProgressing = true
+					}
+				}
+				return storageClassXfs && conditionProgressing && conditionControllerProgressing
+			},
 		},
-		{
-			Kind:      "Pod",
+		&ResourceCondition{
+			ResKind:   "Pod",
 			Condition: fields.Everything(),
-			//Condition: fields.ParseSelectorOrDie("Status.Phase=Pending"),
 		},
-		{
-			Kind:      "StorageClass",
+		&ResourceCondition{
+			ResKind:   "StorageClass",
 			Condition: fields.Everything(),
 		},
-		{
-			Kind:      "CSIDriver",
+		&ResourceCondition{
+			ResKind:   "CSIDriver",
 			Condition: fields.Everything(),
 		},
 	},
@@ -140,9 +221,9 @@ var CsiDriverMissing = Rule{
 			Lhs:    0,
 			Rhs:    1,
 			Exists: true,
-			Rel: &EqualFieldsRelation{
-				LhsPath: "Metadata.Name",
-				RhsPath: "Metadata.Labels.scylla/cluster",
+			Rel: &FunctionalEqualStringFieldsRelation[*scyllav1.ScyllaCluster, *v1.Pod]{
+				LhsExtractor: func(lhs *scyllav1.ScyllaCluster) string { return lhs.Name },     // LhsPath: "Metadata.Name",
+				RhsExtractor: func(rhs *v1.Pod) string { return rhs.Labels["scylla/cluster"] }, // RhsPath: "Metadata.Labels.scylla/cluster",
 			},
 		},
 		{

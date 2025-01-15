@@ -1,7 +1,6 @@
 package analyze
 
 import (
-	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 )
 
@@ -61,18 +60,9 @@ func (d *DataSource) resourcesOfKind(kind string) []interface{} {
 			panic(err)
 		}
 	} else {
-		panic("unknown kind")
+		panic("unknown kind '" + kind + "'")
 	}
 	return r
-}
-
-func (m *ExpMatcher) requirementMatches(obj interface{}, r fields.Requirement) bool {
-	it := GetFieldValueIterator(r.Field, obj)
-	val := it()
-	for val != nil && val.String() != r.Value {
-		val = it()
-	}
-	return val != nil
 }
 
 func (m *ExpMatcher) relationsMatch(target interface{}, r *Rule, idx int, chosen *[]interface{}) bool {
@@ -112,20 +102,12 @@ func (m *ExpMatcher) tryMatch(r *Rule, idx int, chosen *[]interface{}) bool {
 		return true
 	}
 
-	resources := m.ds.resourcesOfKind(r.Resources[idx].Kind)
+	resources := m.ds.resourcesOfKind(r.Resources[idx].Kind())
 	success := false
 	if len(resources) > 0 {
 		// Go through possible resources
 		for _, res := range resources {
-			reqs := r.Resources[idx].Condition.Requirements()
-			requirementsOk := true
-			for _, req := range reqs {
-				if !m.requirementMatches(res, req) {
-					requirementsOk = false
-					break
-				}
-			}
-			if !requirementsOk {
+			if !r.Resources[idx].EvaluateOnResource(res) {
 				continue
 			}
 			if m.relationsMatch(res, r, idx, chosen) {
