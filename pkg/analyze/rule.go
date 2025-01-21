@@ -180,10 +180,6 @@ var CsiDriverMissing = Rule{
 	Resources: []Condition{
 		&FunctionalCondition[*scyllav1.ScyllaCluster]{
 			ResKind: "ScyllaCluster",
-			//fields.AndSelectors(
-			//	fields.ParseSelectorOrDie("Status.Conditions.Type=StatefulSetControllerProgressing"),
-			//	fields.ParseSelectorOrDie("Status.Conditions.Type=Progressing"),
-			//	fields.ParseSelectorOrDie("Spec.Datacenter.Racks.Storage.StorageClassName=scylladb-local-xfs"))
 			Condition: func(c *scyllav1.ScyllaCluster) bool {
 				storageClassXfs := false
 				conditionControllerProgressing := false
