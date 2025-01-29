@@ -5,12 +5,12 @@ import (
 )
 
 type Match struct {
-	Rule      *Rule
+	Rule      *Symptom
 	Resources []interface{}
 }
 
 type Matcher interface {
-	MatchRule(r *Rule) (*Match, error)
+	MatchRule(r *Symptom) (*Match, error)
 }
 
 type ExpMatcher struct {
@@ -51,8 +51,24 @@ func (d *DataSource) resourcesOfKind(kind string) []interface{} {
 		if err != nil {
 			panic(err)
 		}
+	} else if kind == "PersistentVolumeClaim" {
+		a, err := d.PersistentVolumeClaimLister.List(labels.Everything())
+		for _, res := range a {
+			r = append(r, res)
+		}
+		if err != nil {
+			panic(err)
+		}
 	} else if kind == "CSIDriver" {
 		a, err := d.CSIDriverLister.List(labels.Everything())
+		for _, res := range a {
+			r = append(r, res)
+		}
+		if err != nil {
+			panic(err)
+		}
+	} else if kind == "NodeConfig" {
+		a, err := d.NodeConfigLister.List(labels.Everything())
 		for _, res := range a {
 			r = append(r, res)
 		}
@@ -65,7 +81,7 @@ func (d *DataSource) resourcesOfKind(kind string) []interface{} {
 	return r
 }
 
-func (m *ExpMatcher) relationsMatch(target interface{}, r *Rule, idx int, chosen *[]interface{}) bool {
+func (m *ExpMatcher) relationsMatch(target interface{}, r *Symptom, idx int, chosen *[]interface{}) bool {
 	for _, cond := range r.Relations {
 		var (
 			lhs interface{}
@@ -96,7 +112,7 @@ func (m *ExpMatcher) relationsMatch(target interface{}, r *Rule, idx int, chosen
 	return true
 }
 
-func (m *ExpMatcher) tryMatch(r *Rule, idx int, chosen *[]interface{}) bool {
+func (m *ExpMatcher) tryMatch(r *Symptom, idx int, chosen *[]interface{}) bool {
 	if idx >= len(*chosen) {
 		// match found
 		return true
@@ -107,7 +123,7 @@ func (m *ExpMatcher) tryMatch(r *Rule, idx int, chosen *[]interface{}) bool {
 	if len(resources) > 0 {
 		// Go through possible resources
 		for _, res := range resources {
-			if !r.Resources[idx].EvaluateOnResource(res) {
+			if !r.Resources[idx].EvaluateOn(res) {
 				continue
 			}
 			if m.relationsMatch(res, r, idx, chosen) {
@@ -129,7 +145,7 @@ func (m *ExpMatcher) tryMatch(r *Rule, idx int, chosen *[]interface{}) bool {
 	return success
 }
 
-func (m *ExpMatcher) MatchRule(r *Rule) (*Match, error) {
+func (m *ExpMatcher) MatchRule(r *Symptom) (*Match, error) {
 	chosen := make([]interface{}, len(r.Resources))
 	if m.tryMatch(r, 0, &chosen) {
 		return &Match{

@@ -145,7 +145,7 @@ func (o *AnalyzeOptions) Run(streams genericclioptions.IOStreams, cmd *cobra.Com
 	}
 
 	matcher := analyze.NewMatcher(dataSource)
-	res, err := matcher.MatchRule(&analyze.CsiDriverMissing)
+	res, err := matcher.MatchRule(&analyze.NodeConfigNonexistentStorageDevice)
 	klog.Infof("err: %v\n", err)
 	if res != nil {
 		klog.Info("Error found:")

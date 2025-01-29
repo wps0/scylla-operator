@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	scyllav1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1"
+	scyllav1alpha1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
 	scyllaversioned "github.com/scylladb/scylla-operator/pkg/client/scylla/clientset/versioned"
 	scyllav1listers "github.com/scylladb/scylla-operator/pkg/client/scylla/listers/scylla/v1"
+	scyllav1alpha1listers "github.com/scylladb/scylla-operator/pkg/client/scylla/listers/scylla/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,14 +22,16 @@ import (
 )
 
 type DataSource struct {
-	PodLister            corev1listers.PodLister
-	ServiceLister        corev1listers.ServiceLister
-	SecretLister         corev1listers.SecretLister
-	ConfigMapLister      corev1listers.ConfigMapLister
-	ServiceAccountLister corev1listers.ServiceAccountLister
-	StorageClassLister   storagev1listers.StorageClassLister
-	CSIDriverLister      storagev1listers.CSIDriverLister
-	ScyllaClusterLister  scyllav1listers.ScyllaClusterLister
+	PodLister                   corev1listers.PodLister
+	ServiceLister               corev1listers.ServiceLister
+	SecretLister                corev1listers.SecretLister
+	ConfigMapLister             corev1listers.ConfigMapLister
+	ServiceAccountLister        corev1listers.ServiceAccountLister
+	StorageClassLister          storagev1listers.StorageClassLister
+	CSIDriverLister             storagev1listers.CSIDriverLister
+	PersistentVolumeClaimLister corev1listers.PersistentVolumeClaimLister
+	NodeConfigLister            scyllav1alpha1listers.NodeConfigLister
+	ScyllaClusterLister         scyllav1listers.ScyllaClusterLister
 }
 
 func BuildListerWithOptions[T any](
@@ -119,6 +123,13 @@ func NewDataSourceFromClients(
 		return nil, fmt.Errorf("can't build service account lister: %w", err)
 	}
 
+	persistentVolumeClaimLister, err := BuildLister(ctx, corev1listers.NewPersistentVolumeClaimLister, func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
+		return kubeClient.CoreV1().PersistentVolumeClaims(corev1.NamespaceAll).List(ctx, options)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("can't build service account lister: %w", err)
+	}
+
 	scyllaClusterLister, err := BuildLister(ctx, scyllav1listers.NewScyllaClusterLister, func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
 		return scyllaClient.ScyllaV1().ScyllaClusters(corev1.NamespaceAll).List(ctx, options)
 	})
@@ -126,15 +137,24 @@ func NewDataSourceFromClients(
 		return nil, fmt.Errorf("can't build scylla cluster lister: %w", err)
 	}
 
+	nodeConfigLister, err := BuildLister(ctx, scyllav1alpha1listers.NewNodeConfigLister, func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
+		return scyllaClient.ScyllaV1alpha1().NodeConfigs().List(ctx, options)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("can't build scylla cluster lister: %w", err)
+	}
+
 	return &DataSource{
-		PodLister:            podLister,
-		ServiceLister:        serviceLister,
-		SecretLister:         secretLister,
-		ConfigMapLister:      configMapLister,
-		ServiceAccountLister: serviceAccountLister,
-		StorageClassLister:   storageClassLister,
-		CSIDriverLister:      csiDriverLister,
-		ScyllaClusterLister:  scyllaClusterLister,
+		PodLister:                   podLister,
+		ServiceLister:               serviceLister,
+		SecretLister:                secretLister,
+		ConfigMapLister:             configMapLister,
+		ServiceAccountLister:        serviceAccountLister,
+		StorageClassLister:          storageClassLister,
+		CSIDriverLister:             csiDriverLister,
+		PersistentVolumeClaimLister: persistentVolumeClaimLister,
+		NodeConfigLister:            nodeConfigLister,
+		ScyllaClusterLister:         scyllaClusterLister,
 	}, nil
 }
 
@@ -149,13 +169,15 @@ func NewDataSourceFromFS(
 	}
 
 	return &DataSource{
-		PodLister:            corev1listers.NewPodLister(indexers[reflect.TypeOf(&corev1.Pod{})]),
-		ServiceLister:        corev1listers.NewServiceLister(indexers[reflect.TypeOf(&corev1.Service{})]),
-		SecretLister:         corev1listers.NewSecretLister(indexers[reflect.TypeOf(&corev1.Secret{})]),
-		ConfigMapLister:      corev1listers.NewConfigMapLister(indexers[reflect.TypeOf(&corev1.ConfigMap{})]),
-		ServiceAccountLister: corev1listers.NewServiceAccountLister(indexers[reflect.TypeOf(&corev1.ServiceAccount{})]),
-		StorageClassLister:   storagev1listers.NewStorageClassLister(indexers[reflect.TypeOf(&storagev1.StorageClass{})]),
-		CSIDriverLister:      storagev1listers.NewCSIDriverLister(getIndexerForType(indexers, reflect.TypeOf(&storagev1.CSIDriver{}))),
-		ScyllaClusterLister:  scyllav1listers.NewScyllaClusterLister(indexers[reflect.TypeOf(&scyllav1.ScyllaCluster{})]),
+		PodLister:                   corev1listers.NewPodLister(indexers[reflect.TypeOf(&corev1.Pod{})]),
+		ServiceLister:               corev1listers.NewServiceLister(indexers[reflect.TypeOf(&corev1.Service{})]),
+		SecretLister:                corev1listers.NewSecretLister(indexers[reflect.TypeOf(&corev1.Secret{})]),
+		ConfigMapLister:             corev1listers.NewConfigMapLister(indexers[reflect.TypeOf(&corev1.ConfigMap{})]),
+		ServiceAccountLister:        corev1listers.NewServiceAccountLister(indexers[reflect.TypeOf(&corev1.ServiceAccount{})]),
+		StorageClassLister:          storagev1listers.NewStorageClassLister(indexers[reflect.TypeOf(&storagev1.StorageClass{})]),
+		CSIDriverLister:             storagev1listers.NewCSIDriverLister(getIndexerForType(indexers, reflect.TypeOf(&storagev1.CSIDriver{}))),
+		PersistentVolumeClaimLister: corev1listers.NewPersistentVolumeClaimLister(getIndexerForType(indexers, reflect.TypeOf(&corev1.PersistentVolumeClaim{}))),
+		NodeConfigLister:            scyllav1alpha1listers.NewNodeConfigLister(indexers[reflect.TypeOf(&scyllav1alpha1.NodeConfig{})]),
+		ScyllaClusterLister:         scyllav1listers.NewScyllaClusterLister(indexers[reflect.TypeOf(&scyllav1.ScyllaCluster{})]),
 	}, nil
 }

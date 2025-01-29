@@ -1,38 +1,40 @@
 package analyze
 
 import (
+	"context"
 	scyllav1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1"
+	scyllav1alpha1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
 	v1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	"log"
 )
 
-type InterfaceIter = func() interface{}
-
 type Condition interface {
-	Evaluate(ds *DataSource) InterfaceIter
-	EvaluateOnResource(res interface{}) bool
+	EvaluateOn(res interface{}) bool
 	Kind() string
 }
 
-type ResourceCondition[T any] struct {
+type Logger interface {
+	Info(string, ...any)
+}
+
+type TypedCond[T any] struct {
 	ResKind   string
-	Condition func(T) bool
+	Condition func(context.Context, Logger, T) bool
 }
 
-type FunctionalCondition[T any] struct {
-	ResKind   string
-	Condition func(T) bool
+type dummyLogger struct {
 }
 
-func (r *FunctionalCondition[T]) Evaluate(ds *DataSource) InterfaceIter {
-	return func() interface{} { return nil }
+func (d dummyLogger) Info(s string, a ...any) {
+	log.Default().Printf(s, a...)
 }
 
-func (r *FunctionalCondition[T]) EvaluateOnResource(res interface{}) bool {
-	return r.Condition(res.(T))
+func (r *TypedCond[T]) EvaluateOn(res interface{}) bool {
+	return r.Condition(context.Background(), dummyLogger{}, res.(T))
 }
 
-func (r *FunctionalCondition[T]) Kind() string {
+func (r *TypedCond[T]) Kind() string {
 	//return reflect.TypeFor[T]().Name()
 	return r.ResKind
 }
@@ -49,104 +51,145 @@ type resourceConnection struct {
 	Exists bool
 }
 
-type FunctionalEqualStringFieldsRelation[L, R any] struct {
-	LhsExtractor func(lhs L) []string
-	RhsExtractor func(lhs R) []string
+type FuncRelation[L, R any] struct {
+	Evaluate func(lhs L, rhs R) bool
 }
 
-func (f *FunctionalEqualStringFieldsRelation[L, R]) EvaluateOn(a interface{}, b interface{}) (bool, error) {
+func (f *FuncRelation[L, R]) EvaluateOn(a interface{}, b interface{}) (bool, error) {
 	if a != nil {
-		for _, lhs := range f.LhsExtractor(a.(L)) {
-			if b != nil {
-				for _, rhs := range f.RhsExtractor(b.(R)) {
-					if lhs == rhs {
-						return true, nil
-					}
-				}
-			}
-		}
+		return f.Evaluate(a.(L), b.(R)), nil
 	}
 	return false, nil
 }
 
-type Rule struct {
+type Symptom struct {
 	Diagnosis   string
 	Suggestions string
 	Resources   []Condition
 	Relations   []resourceConnection
 }
 
-var CsiDriverMissing = Rule{
-	Diagnosis:   "local-csi-driver CSIDriver, referenced by <NAME> StorageClass, is missing",
-	Suggestions: "deploy local-csi-driver provisioner",
+var (
+	SCYLLADB_LOCAL_XFS_STORAGECLASS = "scylladb-local-xfs"
+)
+
+var NodeConfigNonexistentStorageDevice = Symptom{
+	Diagnosis:   "",
+	Suggestions: "",
 	Resources: []Condition{
-		&FunctionalCondition[*scyllav1.ScyllaCluster]{
+		&TypedCond[*scyllav1.ScyllaCluster]{
 			ResKind: "ScyllaCluster",
-			Condition: func(c *scyllav1.ScyllaCluster) bool {
-				storageClassXfs := false
-				conditionControllerProgressing := false
-				conditionProgressing := false
-				for _, rack := range c.Spec.Datacenter.Racks {
-					if *rack.Storage.StorageClassName == "scylladb-local-xfs" {
-						storageClassXfs = true
+			Condition: func(ctx context.Context, log Logger, cluster *scyllav1.ScyllaCluster) bool {
+				containsNotReady := false
+				for k, v := range cluster.Status.Racks {
+					if v.ReadyMembers < v.Members {
+						log.Info("Rack [%s]: only [%d] out of [%d] member(s) are ready.", k, v.ReadyMembers, v.Members)
+						containsNotReady = true
 					}
 				}
-				for _, cond := range c.Status.Conditions {
-					if cond.Type == "StatefulSetControllerProgressing" {
-						conditionControllerProgressing = true
-					} else if cond.Type == "Progressing" {
-						conditionProgressing = true
-					}
-				}
-				return storageClassXfs && conditionProgressing && conditionControllerProgressing
+				return containsNotReady
 			},
 		},
-		&FunctionalCondition[*v1.Pod]{
+		&TypedCond[*v1.Pod]{
 			ResKind:   "Pod",
-			Condition: func(c *v1.Pod) bool { return true },
+			Condition: func(ctx context.Context, log Logger, _ *v1.Pod) bool { return true },
 		},
-		&FunctionalCondition[*storagev1.StorageClass]{
-			ResKind:   "StorageClass",
-			Condition: func(c *storagev1.StorageClass) bool { return true },
+		&TypedCond[*v1.PersistentVolumeClaim]{
+			ResKind: "PersistentVolumeClaim",
+			Condition: func(ctx context.Context, log Logger, pvc *v1.PersistentVolumeClaim) bool {
+				return pvc.Status.Phase == "Pending"
+			},
 		},
-		&FunctionalCondition[*storagev1.CSIDriver]{
-			ResKind:   "CSIDriver",
-			Condition: func(c *storagev1.CSIDriver) bool { return true },
+		&TypedCond[*storagev1.StorageClass]{ // 3
+			ResKind: "StorageClass",
+			Condition: func(ctx context.Context, log Logger, sc *storagev1.StorageClass) bool {
+				return sc.Name == SCYLLADB_LOCAL_XFS_STORAGECLASS
+			},
+		},
+		&TypedCond[*storagev1.CSIDriver]{ // 4
+			ResKind: "CSIDriver",
+			Condition: func(ctx context.Context, log Logger, csi *storagev1.CSIDriver) bool {
+				return true
+			},
+		},
+		&TypedCond[*v1.Pod]{ // 5 - CSIDriver Pod
+			ResKind: "Pod",
+			Condition: func(ctx context.Context, log Logger, pod *v1.Pod) bool {
+				return pod.Labels["app.kubernetes.io/name"] == "local-csi-driver"
+			},
+		},
+		&TypedCond[*scyllav1alpha1.NodeConfig]{ // 6
+			ResKind: "NodeConfig",
+			Condition: func(ctx context.Context, log Logger, nco *scyllav1alpha1.NodeConfig) bool {
+				return nco.Spec.Placement.NodeSelector["scylla.scylladb.com/node-type"] == "scylla"
+			},
 		},
 	},
 	Relations: []resourceConnection{
 		{
-			Lhs:    0,
-			Rhs:    1,
-			Exists: true,
-			Rel: &FunctionalEqualStringFieldsRelation[*scyllav1.ScyllaCluster, *v1.Pod]{
-				LhsExtractor: func(lhs *scyllav1.ScyllaCluster) []string { return []string{lhs.Name} },
-				RhsExtractor: func(rhs *v1.Pod) []string { return []string{rhs.Labels["scylla/cluster"]} },
-			},
-		},
-		{
-			Lhs:    0,
-			Rhs:    2,
-			Exists: true,
-			Rel: &FunctionalEqualStringFieldsRelation[*scyllav1.ScyllaCluster, *storagev1.StorageClass]{
-				LhsExtractor: func(lhs *scyllav1.ScyllaCluster) []string {
-					classes := make([]string, 0)
-					for _, rack := range lhs.Spec.Datacenter.Racks {
-						classes = append(classes, *rack.Storage.StorageClassName)
-					}
-					return classes
+			Lhs: 0,
+			Rhs: 1,
+			Rel: &FuncRelation[*scyllav1.ScyllaCluster, *v1.Pod]{
+				Evaluate: func(lhs *scyllav1.ScyllaCluster, rhs *v1.Pod) bool {
+					return lhs.Name == rhs.Labels["scylla/cluster"]
 				},
-				RhsExtractor: func(rhs *storagev1.StorageClass) []string { return []string{rhs.Name} },
 			},
+			Exists: true,
 		},
 		{
-			Lhs:    2,
-			Rhs:    3,
-			Exists: false,
-			Rel: &FunctionalEqualStringFieldsRelation[*storagev1.StorageClass, *storagev1.CSIDriver]{
-				LhsExtractor: func(lhs *storagev1.StorageClass) []string { return []string{lhs.Provisioner} },
-				RhsExtractor: func(rhs *storagev1.CSIDriver) []string { return []string{rhs.Name} },
+			Lhs: 1,
+			Rhs: 2,
+			Rel: &FuncRelation[*v1.Pod, *v1.PersistentVolumeClaim]{
+				Evaluate: func(lhs *v1.Pod, rhs *v1.PersistentVolumeClaim) bool {
+					for _, vol := range lhs.Spec.Volumes {
+						if vol.PersistentVolumeClaim != nil && vol.PersistentVolumeClaim.ClaimName == rhs.Name {
+							return true
+						}
+					}
+					return false
+				},
 			},
+			Exists: true,
+		},
+		{
+			Lhs: 2,
+			Rhs: 3,
+			Rel: &FuncRelation[*v1.PersistentVolumeClaim, *storagev1.StorageClass]{
+				Evaluate: func(lhs *v1.PersistentVolumeClaim, rhs *storagev1.StorageClass) bool {
+					return *lhs.Spec.StorageClassName == rhs.Name
+				},
+			},
+			Exists: true,
+		},
+		{
+			Lhs: 3,
+			Rhs: 4,
+			Rel: &FuncRelation[*storagev1.StorageClass, *storagev1.CSIDriver]{
+				Evaluate: func(lhs *storagev1.StorageClass, rhs *storagev1.CSIDriver) bool {
+					return lhs.Provisioner == rhs.Name
+				},
+			},
+			Exists: true,
+		},
+		{
+			Lhs: 5,
+			Rhs: 6,
+			Rel: &FuncRelation[*v1.Pod, *scyllav1alpha1.NodeConfig]{
+				Evaluate: func(csiPod *v1.Pod, nodeConfig *scyllav1alpha1.NodeConfig) bool {
+					dirsMounted := false
+					for _, vol := range csiPod.Spec.Volumes {
+						if vol.Name == "volumes-dir" {
+							for _, mp := range nodeConfig.Spec.LocalDiskSetup.Mounts {
+								if (*vol.HostPath).Path == mp.MountPoint {
+									dirsMounted = true
+								}
+							}
+						}
+					}
+					return dirsMounted
+				},
+			},
+			Exists: false,
 		},
 	},
 }
