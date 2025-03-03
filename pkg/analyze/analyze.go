@@ -12,7 +12,7 @@ import (
 
 func Analyze(ctx context.Context, ds snapshot.Snapshot) error {
 	statusChan := make(chan symptoms.JobStatus)
-	matchWorkerPool := symptoms.NewMatchWorkerPool(ctx, ds, statusChan, runtime.NumCPU())
+	matchWorkerPool := symptoms.NewDefaultMatchWorkerPool(ctx, ds, statusChan, runtime.NumCPU(), symptoms.Worker)
 	matchWorkerPool.Start()
 	defer close(statusChan)
 	defer matchWorkerPool.Finish()

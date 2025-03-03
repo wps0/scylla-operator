@@ -17,6 +17,7 @@ import (
 type Snapshot interface {
 	Add(obj interface{})
 	List(objType reflect.Type) []interface{}
+	All() map[reflect.Type][]interface{}
 }
 
 type DefaultSnapshot struct {
@@ -44,6 +45,10 @@ func (ds *DefaultSnapshot) List(objType reflect.Type) []interface{} {
 		return make([]interface{}, 0)
 	}
 	return list
+}
+
+func (ds *DefaultSnapshot) All() map[reflect.Type][]interface{} {
+	return ds.Objects
 }
 
 func BuildListerWithOptions[T any](
