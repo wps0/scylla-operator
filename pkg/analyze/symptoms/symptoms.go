@@ -174,6 +174,9 @@ func (s *symptomSet) SetParent(parent *SymptomSet) {
 }
 
 func (s *symptomSet) Add(ss *Symptom) error {
+	if ss == nil {
+		return errors.New("symptom is nil")
+	}
 	_, isIn := s.symptoms[(*ss).Name()]
 	if isIn {
 		return errors.New("symptom already exists")
@@ -183,6 +186,9 @@ func (s *symptomSet) Add(ss *Symptom) error {
 }
 
 func (s *symptomSet) AddChild(ss *SymptomSet) error {
+	if ss == nil {
+		return errors.New("symptomSet is nil")
+	}
 	_, isIn := s.children[(*ss).Name()]
 	if isIn {
 		return errors.New(fmt.Sprintf("symptom already exists: %v", ss))

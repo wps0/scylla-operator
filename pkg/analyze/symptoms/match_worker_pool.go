@@ -21,11 +21,18 @@ type MatchWorkerPool struct {
 	statusChan    chan JobStatus
 	numWorkers    int
 	started       bool
+	worker        func(ctx context.Context, pool *MatchWorkerPool)
 	workerContext context.Context
 	workerCancel  context.CancelFunc
 }
 
-func NewMatchWorkerPool(ctx context.Context, ds snapshot.Snapshot, statusChan chan JobStatus, numWorkers int) *MatchWorkerPool {
+func NewDefaultMatchWorkerPool(
+	ctx context.Context,
+	ds snapshot.Snapshot,
+	statusChan chan JobStatus,
+	numWorkers int,
+	worker func(ctx context.Context, pool *MatchWorkerPool),
+) *MatchWorkerPool {
 	workerContext, workerCancel := context.WithCancel(ctx)
 	return &MatchWorkerPool{
 		ds:            ds,
@@ -33,6 +40,7 @@ func NewMatchWorkerPool(ctx context.Context, ds snapshot.Snapshot, statusChan ch
 		statusChan:    statusChan,
 		numWorkers:    numWorkers,
 		started:       false,
+		worker:        worker,
 		workerContext: workerContext,
 		workerCancel:  workerCancel,
 	}
@@ -64,7 +72,7 @@ func (w *MatchWorkerPool) Start() {
 	}
 	w.started = true
 	for i := 0; i < w.numWorkers; i++ {
-		go worker(w.workerContext, w)
+		go w.worker(w.workerContext, w)
 	}
 }
 
@@ -73,7 +81,7 @@ func (w *MatchWorkerPool) Finish() {
 	close(w.jobs)
 }
 
-func worker(ctx context.Context, pool *MatchWorkerPool) {
+func Worker(ctx context.Context, pool *MatchWorkerPool) {
 	for {
 		select {
 		case <-ctx.Done():

@@ -56,8 +56,8 @@ func buildLocalCsiDriverMissingSymptoms() *symptoms.SymptomSet {
 func buildStorageClassMissingSymptoms() *symptoms.SymptomSet {
 	// Scenario #1: scylladb-local-xfs StorageClass used by a ScyllaCluster is missing
 	notDeployedStorageClass := symptoms.NewSymptom("StorageClass is missing",
-		"%[cluster-storage-class.Name]% StorageClass used by a ScyllaCluster is missing",
-		"deploy %[cluster-storage-class.Name]% StorageClass (or change StorageClass)",
+		"%[storage-class.Name]% StorageClass used by a ScyllaCluster is missing",
+		"deploy %[storage-class.Name]% StorageClass (or change StorageClass)",
 		selectors.
 			Select("scylla-cluster", selectors.Type[*scyllav1.ScyllaCluster]()).
 			Select("storage-class", selectors.Type[*storagev1.StorageClass]()).
