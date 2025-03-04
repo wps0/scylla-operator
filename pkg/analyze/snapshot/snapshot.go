@@ -20,25 +20,25 @@ type Snapshot interface {
 	All() map[reflect.Type][]interface{}
 }
 
-type DefaultSnapshot struct {
+type defaultSnapshot struct {
 	objects map[reflect.Type][]interface{}
 }
 
-func NewEmptySnapshot() DefaultSnapshot {
-	ds := DefaultSnapshot{
+func NewEmptySnapshot() defaultSnapshot {
+	ds := defaultSnapshot{
 		objects: make(map[reflect.Type][]interface{}),
 	}
 	return ds
 }
 
-func NewSnapshot(objs map[reflect.Type][]interface{}) DefaultSnapshot {
-	ds := DefaultSnapshot{
+func NewSnapshot(objs map[reflect.Type][]interface{}) defaultSnapshot {
+	ds := defaultSnapshot{
 		objects: objs,
 	}
 	return ds
 }
 
-func (ds *DefaultSnapshot) Add(obj interface{}) {
+func (ds *defaultSnapshot) Add(obj interface{}) {
 	t := reflect.TypeOf(obj)
 	if _, exists := ds.objects[t]; !exists {
 		ds.objects[t] = make([]interface{}, 0)
@@ -46,7 +46,7 @@ func (ds *DefaultSnapshot) Add(obj interface{}) {
 	ds.objects[t] = append(ds.objects[t], obj)
 }
 
-func (ds *DefaultSnapshot) List(objType reflect.Type) []interface{} {
+func (ds *defaultSnapshot) List(objType reflect.Type) []interface{} {
 	list, exists := ds.objects[objType]
 	if !exists {
 		return make([]interface{}, 0)
@@ -54,7 +54,7 @@ func (ds *DefaultSnapshot) List(objType reflect.Type) []interface{} {
 	return list
 }
 
-func (ds *DefaultSnapshot) All() map[reflect.Type][]interface{} {
+func (ds *defaultSnapshot) All() map[reflect.Type][]interface{} {
 	return ds.objects
 }
 
