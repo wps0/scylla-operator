@@ -53,7 +53,7 @@ func TestNewDataSourceFromClients_SingleLister(t *testing.T) {
 		kubernetesObjects []runtime.Object
 		scyllaObjects     []runtime.Object
 		checkedType       reflect.Type
-		expectedObjects   []runtime.Object
+		expectedObjects   []any
 		expectedErr       error
 	}{
 		{
@@ -65,14 +65,14 @@ func TestNewDataSourceFromClients_SingleLister(t *testing.T) {
 				})
 			}(),
 			scyllaObjects:   newBasicScyllaObjects(),
-			expectedObjects: []runtime.Object{},
+			expectedObjects: []any{},
 			expectedErr:     nil,
 		},
 		{
 			name:              "nonempty pod list",
 			kubernetesObjects: newBasicKubernetesObjects(),
 			scyllaObjects:     newBasicScyllaObjects(),
-			expectedObjects: []runtime.Object{
+			expectedObjects: []any{
 				&corev1.Pod{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "pod1",
@@ -86,6 +86,7 @@ func TestNewDataSourceFromClients_SingleLister(t *testing.T) {
 					},
 				},
 			},
+			checkedType: reflect.TypeOf(&corev1.Pod{}),
 			expectedErr: nil,
 		},
 		{
@@ -97,14 +98,14 @@ func TestNewDataSourceFromClients_SingleLister(t *testing.T) {
 				})
 			}(),
 			scyllaObjects:   newBasicScyllaObjects(),
-			expectedObjects: []runtime.Object{},
+			expectedObjects: []any{},
 			expectedErr:     nil,
 		},
 		{
 			name:              "nonempty service list",
 			kubernetesObjects: newBasicKubernetesObjects(),
 			scyllaObjects:     newBasicScyllaObjects(),
-			expectedObjects: []runtime.Object{
+			expectedObjects: []any{
 				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "service1",
@@ -118,6 +119,7 @@ func TestNewDataSourceFromClients_SingleLister(t *testing.T) {
 					},
 				},
 			},
+			checkedType: reflect.TypeOf(&corev1.Service{}),
 			expectedErr: nil,
 		},
 		{
@@ -129,14 +131,14 @@ func TestNewDataSourceFromClients_SingleLister(t *testing.T) {
 				})
 			}(),
 			scyllaObjects:   newBasicScyllaObjects(),
-			expectedObjects: []runtime.Object{},
+			expectedObjects: []any{},
 			expectedErr:     nil,
 		},
 		{
 			name:              "nonempty secret list",
 			kubernetesObjects: newBasicKubernetesObjects(),
 			scyllaObjects:     newBasicScyllaObjects(),
-			expectedObjects: []runtime.Object{
+			expectedObjects: []any{
 				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "secret1",
@@ -150,6 +152,7 @@ func TestNewDataSourceFromClients_SingleLister(t *testing.T) {
 					},
 				},
 			},
+			checkedType: reflect.TypeOf(&corev1.Secret{}),
 			expectedErr: nil,
 		},
 		{
@@ -161,14 +164,14 @@ func TestNewDataSourceFromClients_SingleLister(t *testing.T) {
 				})
 			}(),
 			scyllaObjects:   newBasicScyllaObjects(),
-			expectedObjects: []runtime.Object{},
+			expectedObjects: []any{},
 			expectedErr:     nil,
 		},
 		{
 			name:              "nonempty config map list",
 			kubernetesObjects: newBasicKubernetesObjects(),
 			scyllaObjects:     newBasicScyllaObjects(),
-			expectedObjects: []runtime.Object{
+			expectedObjects: []any{
 				&corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "configmap1",
@@ -182,6 +185,7 @@ func TestNewDataSourceFromClients_SingleLister(t *testing.T) {
 					},
 				},
 			},
+			checkedType: reflect.TypeOf(&corev1.ConfigMap{}),
 			expectedErr: nil,
 		},
 		{
@@ -193,14 +197,14 @@ func TestNewDataSourceFromClients_SingleLister(t *testing.T) {
 				})
 			}(),
 			scyllaObjects:   newBasicScyllaObjects(),
-			expectedObjects: []runtime.Object{},
+			expectedObjects: []any{},
 			expectedErr:     nil,
 		},
 		{
 			name:              "nonempty service account list",
 			kubernetesObjects: newBasicKubernetesObjects(),
 			scyllaObjects:     newBasicScyllaObjects(),
-			expectedObjects: []runtime.Object{
+			expectedObjects: []any{
 				&corev1.ServiceAccount{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "serviceaccount1",
@@ -214,6 +218,7 @@ func TestNewDataSourceFromClients_SingleLister(t *testing.T) {
 					},
 				},
 			},
+			checkedType: reflect.TypeOf(&corev1.ServiceAccount{}),
 			expectedErr: nil,
 		},
 		{
@@ -225,14 +230,14 @@ func TestNewDataSourceFromClients_SingleLister(t *testing.T) {
 					return ok
 				})
 			}(),
-			expectedObjects: []runtime.Object{},
+			expectedObjects: []any{},
 			expectedErr:     nil,
 		},
 		{
 			name:              "nonempty scylla cluster list",
 			kubernetesObjects: newBasicKubernetesObjects(),
 			scyllaObjects:     newBasicScyllaObjects(),
-			expectedObjects: []runtime.Object{
+			expectedObjects: []any{
 				&scyllav1.ScyllaCluster{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "scyllacluster1",
@@ -246,6 +251,7 @@ func TestNewDataSourceFromClients_SingleLister(t *testing.T) {
 					},
 				},
 			},
+			checkedType: reflect.TypeOf(&scyllav1.ScyllaCluster{}),
 			expectedErr: nil,
 		},
 	}
@@ -262,7 +268,7 @@ func TestNewDataSourceFromClients_SingleLister(t *testing.T) {
 
 			snapshot, err := NewSnapshotFromListers(ctx, fakeClient, scyllaFakeClient)
 
-			gotObjects := snapshot.Objects[tc.checkedType]
+			gotObjects := snapshot.List(tc.checkedType)
 
 			sort.Slice(gotObjects, func(i, j int) bool {
 				return compareRuntimeObjects(gotObjects[i], gotObjects[j])
@@ -274,8 +280,8 @@ func TestNewDataSourceFromClients_SingleLister(t *testing.T) {
 				t.Fatalf("expected error: %v, got: %v", tc.expectedErr, err)
 			}
 
-			if !equality.Semantic.DeepEqual(snapshot.Objects, tc.expectedObjects) {
-				t.Errorf("expected and actual objects differ: %s", cmp.Diff(tc.expectedObjects, snapshot.Objects))
+			if !equality.Semantic.DeepEqual(gotObjects, tc.expectedObjects) {
+				t.Errorf("expected and actual objects differ: %s", cmp.Diff(tc.expectedObjects, gotObjects))
 			}
 		})
 	}
@@ -688,8 +694,8 @@ metadata:
 
 			if err == nil {
 
-				if !compareSnapshotObjects(snapshot.Objects, tc.expectedObjects) {
-					t.Errorf("expected and actual objects differ: %s", cmp.Diff(tc.expectedObjects, snapshot.Objects))
+				if !compareSnapshotObjects(snapshot.All(), tc.expectedObjects) {
+					t.Errorf("expected and actual objects differ: %s", cmp.Diff(tc.expectedObjects, snapshot.All()))
 				}
 			}
 		})

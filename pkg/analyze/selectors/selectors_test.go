@@ -103,9 +103,7 @@ func ExampleMissingCSIDriver() {
 		},
 	}
 
-	snapshot := snapshot.DefaultSnapshot{
-		Objects: resources,
-	}
+	snapshot := snapshot.NewSnapshot(resources)
 
 	builder := Select("scylla-cluster", Type[*scyllav1.ScyllaCluster]()).
 		Select("storage-class", Type[*storagev1.StorageClass]()).

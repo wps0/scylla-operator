@@ -21,26 +21,33 @@ type Snapshot interface {
 }
 
 type DefaultSnapshot struct {
-	Objects map[reflect.Type][]interface{}
+	objects map[reflect.Type][]interface{}
 }
 
-func NewDefaultSnapshot() DefaultSnapshot {
+func NewEmptySnapshot() DefaultSnapshot {
 	ds := DefaultSnapshot{
-		Objects: make(map[reflect.Type][]interface{}),
+		objects: make(map[reflect.Type][]interface{}),
+	}
+	return ds
+}
+
+func NewSnapshot(objs map[reflect.Type][]interface{}) DefaultSnapshot {
+	ds := DefaultSnapshot{
+		objects: objs,
 	}
 	return ds
 }
 
 func (ds *DefaultSnapshot) Add(obj interface{}) {
 	t := reflect.TypeOf(obj)
-	if _, exists := ds.Objects[t]; !exists {
-		ds.Objects[t] = make([]interface{}, 0)
+	if _, exists := ds.objects[t]; !exists {
+		ds.objects[t] = make([]interface{}, 0)
 	}
-	ds.Objects[t] = append(ds.Objects[t], obj)
+	ds.objects[t] = append(ds.objects[t], obj)
 }
 
 func (ds *DefaultSnapshot) List(objType reflect.Type) []interface{} {
-	list, exists := ds.Objects[objType]
+	list, exists := ds.objects[objType]
 	if !exists {
 		return make([]interface{}, 0)
 	}
@@ -48,7 +55,7 @@ func (ds *DefaultSnapshot) List(objType reflect.Type) []interface{} {
 }
 
 func (ds *DefaultSnapshot) All() map[reflect.Type][]interface{} {
-	return ds.Objects
+	return ds.objects
 }
 
 func BuildListerWithOptions[T any](
@@ -119,7 +126,7 @@ func NewSnapshotFromListers(
 	kubeClient kubernetes.Interface,
 	scyllaClient scyllaversioned.Interface,
 ) (Snapshot, error) {
-	ds := NewDefaultSnapshot()
+	ds := NewEmptySnapshot()
 
 	err := BuildList(ctx, &ds, func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
 		return kubeClient.CoreV1().Pods(corev1.NamespaceAll).List(ctx, options)
