@@ -18,10 +18,17 @@ func Analyze(ctx context.Context, ds snapshot.Snapshot) error {
 	defer close(statusChan)
 	defer matchWorkerPool.Finish()
 
-	for _, tree := range rules.SymptomTrees {
+	/*
+	for _, tree := range rules.SymptomTests {
 		matchWorkerPool.EnqueueTree(tree, statusChan)
 	}
-	enqueued := len(rules.SymptomTrees)
+	enqueued := len(rules.SymptomTests)
+	*/
+
+	for _, tree := range rules.Symptoms {
+		matchWorkerPool.EnqueueTree(tree, statusChan)
+	}
+	enqueued := len(rules.Symptoms)
 
 	klog.Infof("enqueued %d symptom trees", enqueued)
 
