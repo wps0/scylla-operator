@@ -17,8 +17,12 @@ func Analyze(ctx context.Context, ds snapshot.Snapshot) error {
 	defer close(statusChan)
 	defer matchWorkerPool.Finish()
 
-	enqueued := matchWorkerPool.EnqueueAll(&rules.Symptoms)
-	klog.Infof("enqueued %d symptoms", enqueued)
+	for _, tree := range rules.SymptomTrees {
+		matchWorkerPool.EnqueueTree(tree, statusChan)
+	}
+	enqueued := len(rules.SymptomTrees)
+
+	klog.Infof("enqueued %d symptom trees", enqueued)
 
 	finished := 0
 	for {
@@ -31,7 +35,7 @@ func Analyze(ctx context.Context, ds snapshot.Snapshot) error {
 			finished++
 
 			if status.Error != nil {
-				klog.Warningf("symptom %s error: %v", (*status.Job.Symptom).Name(), status.Error)
+				klog.Warningf("symptom %s error: %v", status.Job.Symptom.Name(), status.Error)
 			}
 			if status.Issues != nil {
 				for _, issue := range status.Issues {
@@ -52,6 +56,6 @@ func Analyze(ctx context.Context, ds snapshot.Snapshot) error {
 		}
 	}
 
-	klog.Infof("scanned the cluster for %d symptoms", enqueued)
+	klog.Infof("scanned the cluster for %d symptom trees", enqueued)
 	return nil
 }

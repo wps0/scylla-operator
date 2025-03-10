@@ -125,11 +125,34 @@ type SymptomSet interface {
 	AddChild(*SymptomSet) error
 }
 
+type conditionHandler func(*MatchWorkerPool, Symptom, int, chan JobStatus, chan JobStatus)
+
+type SymptomTreeNode interface {
+	Name() string
+	Symptom() Symptom
+	Parent() *SymptomTreeNode
+	SetParent(*SymptomTreeNode) 
+	Handler() conditionHandler
+	IsLeaf() bool
+
+	Children() []SymptomTreeNode
+	AddChild(SymptomTreeNode)
+}
+
 type symptomSet struct {
 	name     string
 	parent   *SymptomSet
 	symptoms map[string]*Symptom
 	children map[string]*SymptomSet
+}
+
+type symptomTreeNode struct {
+	name string
+	parent *SymptomTreeNode
+	symptom Symptom
+	leaf bool
+	children []SymptomTreeNode
+	handler conditionHandler
 }
 
 func NewEmptySymptomSet(name string) SymptomSet {
@@ -138,6 +161,28 @@ func NewEmptySymptomSet(name string) SymptomSet {
 		parent:   nil,
 		symptoms: make(map[string]*Symptom),
 		children: make(map[string]*SymptomSet),
+	}
+}
+
+func NewSymptomTreeLeaf(name string, symptom Symptom) SymptomTreeNode{
+	return &symptomTreeNode{
+		name: name,
+		symptom: symptom,
+		parent: nil,
+		children: nil,
+		handler: nil,
+		leaf: true,
+	}
+}
+
+func NewSymptomTreeNode(name string, symptom Symptom, handler conditionHandler) SymptomTreeNode {
+	return &symptomTreeNode{
+		name: name,
+		symptom: symptom,
+		parent: nil,
+		children: make([]SymptomTreeNode, 0),
+		handler: handler,
+		leaf: false,
 	}
 }
 
@@ -157,11 +202,23 @@ func (s *symptomSet) Name() string {
 	return s.name
 }
 
+func (s *symptomTreeNode) Name() string {
+	return s.name
+}
+
 func (s *symptomSet) Symptoms() map[string]*Symptom {
 	return s.symptoms
 }
 
+func (s *symptomTreeNode) Symptom() Symptom {
+	return s.symptom
+}
+
 func (s *symptomSet) DerivedSets() map[string]*SymptomSet {
+	return s.children
+}
+
+func (s *symptomTreeNode) Children() []SymptomTreeNode {
 	return s.children
 }
 
@@ -169,8 +226,24 @@ func (s *symptomSet) Parent() *SymptomSet {
 	return s.parent
 }
 
+func (s *symptomTreeNode) Parent() *SymptomTreeNode {
+	return s.parent
+}
+
 func (s *symptomSet) SetParent(parent *SymptomSet) {
 	s.parent = parent
+}
+
+func (s *symptomTreeNode) SetParent(parent *SymptomTreeNode){
+	s.parent = parent
+}
+
+func (s *symptomTreeNode) Handler() conditionHandler{
+	return s.handler
+}
+
+func (s *symptomTreeNode) IsLeaf() bool{
+	return s.leaf
 }
 
 func (s *symptomSet) Add(ss *Symptom) error {
@@ -198,4 +271,55 @@ func (s *symptomSet) AddChild(ss *SymptomSet) error {
 	var thisAsInterface SymptomSet = s
 	(*ss).SetParent(&thisAsInterface)
 	return nil
+}
+
+func (s *symptomTreeNode) AddChild(c SymptomTreeNode) {
+	s.children = append(s.children, c)
+
+	var thisAsInterface SymptomTreeNode = s
+	c.SetParent(&thisAsInterface)
+}
+
+func TrueCondition(w *MatchWorkerPool, symptom Symptom, children int, recv chan JobStatus, send chan JobStatus){
+	w.EnqueueNode(symptom, send)
+	for _ = range(children){
+		_ = <- recv
+	}
+	close(recv)
+}
+
+func OrCondition(w *MatchWorkerPool, symptom Symptom, children int, recv chan JobStatus, send chan JobStatus){
+	enqueued := false
+	for i := 0; i<children; i++{
+		jobStatus := <- recv
+		if jobStatus.matched() && !enqueued{
+			w.EnqueueNode(symptom, send)
+			enqueued = true
+		}
+	}
+	if !enqueued {
+		send <- JobStatus{
+			Job: nil,
+			Error: nil,
+			Issues: make([]Issue, 0),
+		}
+	} 
+
+	close(recv)
+}
+
+func AndCondition(w *MatchWorkerPool, symptom Symptom, children int, recv chan JobStatus, send chan JobStatus){
+	msgSend := false
+	for i :=0; i<children; i++{
+		jobStatus := <- recv
+		if !jobStatus.matched() && !msgSend{
+			send <- jobStatus
+			msgSend = true
+		}
+	}
+	if !msgSend {
+		w.EnqueueNode(symptom, send)
+	}
+	
+	close(recv)
 }

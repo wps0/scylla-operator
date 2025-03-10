@@ -6,3 +6,5 @@ var Symptoms = symptoms.NewSymptomSet("root", []*symptoms.SymptomSet{
 	&StorageSymptoms,
 	&DummySymptoms,
 })
+
+var SymptomTrees = []symptoms.SymptomTreeNode{OrTestTree()}

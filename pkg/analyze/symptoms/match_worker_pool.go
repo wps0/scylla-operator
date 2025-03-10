@@ -6,13 +6,18 @@ import (
 )
 
 type Job struct {
-	Symptom *Symptom
+	Symptom Symptom
+	ResultsChan chan JobStatus
 }
 
 type JobStatus struct {
 	Job    *Job
 	Error  error
 	Issues []Issue
+}
+
+func (j JobStatus) matched() bool{
+	return len(j.Issues) > 0
 }
 
 type MatchWorkerPool struct {
@@ -48,16 +53,36 @@ func NewDefaultMatchWorkerPool(
 
 func (w *MatchWorkerPool) EnqueueAll(symptoms *SymptomSet) int {
 	count := len((*symptoms).Symptoms())
-	for _, s := range (*symptoms).Symptoms() {
-		w.Enqueue(Job{
-			Symptom: s,
-		})
-	}
-
-	for _, s := range (*symptoms).DerivedSets() {
-		count += w.EnqueueAll(s)
-	}
+//	for _, s := range (*symptoms).Symptoms() {
+//		w.Enqueue(Job{
+//			Symptom: s,
+//		})
+//	}
+//
+//	for _, s := range (*symptoms).DerivedSets() {
+//		count += w.EnqueueAll(s)
+//	}
 	return count
+}
+
+
+func (w *MatchWorkerPool) EnqueueTree(root SymptomTreeNode, results chan JobStatus) {
+	if root.IsLeaf(){
+		w.EnqueueNode(root.Symptom(), results)
+	}else{
+		c := make(chan JobStatus)
+		go root.Handler()(w, root.Symptom(), len(root.Children()), c, results)
+		for _, child := range(root.Children()) {
+			w.EnqueueTree(child, c)
+		}
+	}
+}
+
+func (w *MatchWorkerPool) EnqueueNode(symptom Symptom, results chan JobStatus){
+	w.Enqueue(Job{
+		Symptom: symptom,
+		ResultsChan: results,
+	})
 }
 
 func (w *MatchWorkerPool) Enqueue(job Job) {
@@ -87,8 +112,8 @@ func Worker(ctx context.Context, pool *MatchWorkerPool) {
 		case <-ctx.Done():
 			break
 		case job := <-pool.jobs:
-			diag, err := (*job.Symptom).Match(pool.ds)
-			pool.statusChan <- JobStatus{
+			diag, err := job.Symptom.Match(pool.ds)
+			job.ResultsChan <- JobStatus{
 				Job:    job,
 				Error:  err,
 				Issues: diag,
