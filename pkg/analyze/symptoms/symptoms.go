@@ -280,20 +280,21 @@ func (s *symptomTreeNode) AddChild(c SymptomTreeNode) {
 	c.SetParent(&thisAsInterface)
 }
 
+// Chyba useless
 func TrueCondition(w *MatchWorkerPool, symptom Symptom, children int, recv chan JobStatus, send chan JobStatus){
-	w.EnqueueNode(symptom, send)
+	w.EnqueueNode(symptom, send, nil)
 	for _ = range(children){
 		_ = <- recv
 	}
 	close(recv)
 }
 
-func OrCondition(w *MatchWorkerPool, symptom Symptom, children int, recv chan JobStatus, send chan JobStatus){
+func OrConditionPropagateFirst(w *MatchWorkerPool, symptom Symptom, children int, recv chan JobStatus, send chan JobStatus){
 	enqueued := false
 	for i := 0; i<children; i++{
 		jobStatus := <- recv
 		if jobStatus.matched() && !enqueued{
-			w.EnqueueNode(symptom, send)
+			w.EnqueueNode(symptom, send, jobStatus.Issues)
 			enqueued = true
 		}
 	}
@@ -302,23 +303,52 @@ func OrCondition(w *MatchWorkerPool, symptom Symptom, children int, recv chan Jo
 			Job: nil,
 			Error: nil,
 			Issues: make([]Issue, 0),
+			SubIssues: make([]Issue, 0),
 		}
-	} 
+	}
+
+	close(recv)
+}
+
+func OrConditionPropagateAll(w *MatchWorkerPool, symptom Symptom, children int, recv chan JobStatus, send chan JobStatus){
+	matched := false
+	subIssues := make([]Issue, 0)
+	for i := 0; i<children; i++{
+		jobStatus := <- recv
+		subIssues = append(subIssues, jobStatus.Issues...)
+		if jobStatus.matched() {
+			matched = true
+		}
+	}
+	if matched{
+		w.EnqueueNode(symptom, send, subIssues)
+	}else{
+		send <- JobStatus{
+			Job: nil,
+			Error: nil,
+			Issues: make([]Issue, 0),
+			SubIssues: make([]Issue, 0),
+		}
+	}
 
 	close(recv)
 }
 
 func AndCondition(w *MatchWorkerPool, symptom Symptom, children int, recv chan JobStatus, send chan JobStatus){
 	msgSend := false
+	subIssues := make([]Issue, 0)
 	for i :=0; i<children; i++{
 		jobStatus := <- recv
+		subIssues = append(subIssues, jobStatus.Issues...)
 		if !jobStatus.matched() && !msgSend{
+			jobStatus.SubIssues = append(jobStatus.Issues, jobStatus.SubIssues...)
+			jobStatus.Issues = make([]Issue, 0)
 			send <- jobStatus
 			msgSend = true
 		}
 	}
 	if !msgSend {
-		w.EnqueueNode(symptom, send)
+		w.EnqueueNode(symptom, send, subIssues)
 	}
 	
 	close(recv)

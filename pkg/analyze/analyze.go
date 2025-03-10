@@ -8,6 +8,7 @@ import (
 	"github.com/scylladb/scylla-operator/pkg/analyze/symptoms/rules"
 	"k8s.io/klog/v2"
 	"runtime"
+	"fmt"
 )
 
 func Analyze(ctx context.Context, ds snapshot.Snapshot) error {
@@ -38,7 +39,17 @@ func Analyze(ctx context.Context, ds snapshot.Snapshot) error {
 				klog.Warningf("symptom %s error: %v", status.Job.Symptom.Name(), status.Error)
 			}
 			if status.Issues != nil {
+				fmt.Println("Main issue:")
 				for _, issue := range status.Issues {
+					err := front.Print([]front.Diagnosis{front.NewDiagnosis(issue.Symptom, issue.Resources)})
+					if err != nil {
+						klog.Warningf("can't print diagnosis: %v", err)
+					}
+				}
+			}
+			if status.SubIssues != nil {
+				fmt.Println("Sub Issues:")
+				for _, issue := range status.SubIssues {
 					err := front.Print([]front.Diagnosis{front.NewDiagnosis(issue.Symptom, issue.Resources)})
 					if err != nil {
 						klog.Warningf("can't print diagnosis: %v", err)

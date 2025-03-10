@@ -7,6 +7,7 @@ import (
 
 type Job struct {
 	Symptom Symptom
+	SubIssues []Issue
 	ResultsChan chan JobStatus
 }
 
@@ -14,6 +15,7 @@ type JobStatus struct {
 	Job    *Job
 	Error  error
 	Issues []Issue
+	SubIssues []Issue
 }
 
 func (j JobStatus) matched() bool{
@@ -68,7 +70,7 @@ func (w *MatchWorkerPool) EnqueueAll(symptoms *SymptomSet) int {
 
 func (w *MatchWorkerPool) EnqueueTree(root SymptomTreeNode, results chan JobStatus) {
 	if root.IsLeaf(){
-		w.EnqueueNode(root.Symptom(), results)
+		w.EnqueueNode(root.Symptom(), results, nil)
 	}else{
 		c := make(chan JobStatus)
 		go root.Handler()(w, root.Symptom(), len(root.Children()), c, results)
@@ -78,10 +80,11 @@ func (w *MatchWorkerPool) EnqueueTree(root SymptomTreeNode, results chan JobStat
 	}
 }
 
-func (w *MatchWorkerPool) EnqueueNode(symptom Symptom, results chan JobStatus){
+func (w *MatchWorkerPool) EnqueueNode(symptom Symptom, results chan JobStatus, subIssues []Issue){
 	w.Enqueue(Job{
 		Symptom: symptom,
 		ResultsChan: results,
+		SubIssues: subIssues,
 	})
 }
 
@@ -117,6 +120,7 @@ func Worker(ctx context.Context, pool *MatchWorkerPool) {
 				Job:    job,
 				Error:  err,
 				Issues: diag,
+				SubIssues: job.SubIssues,
 			}
 		}
 	}
