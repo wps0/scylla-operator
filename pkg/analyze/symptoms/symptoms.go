@@ -156,6 +156,19 @@ func NewSymptomTreeNode(name string, symptom Symptom, handler conditionHandler) 
 	}
 }
 
+func NewSymptomTreeNodeWithChildren(name string, symptom Symptom, handler conditionHandler, children ...SymptomTreeNode) SymptomTreeNode{
+	node := symptomTreeNode{
+		name: name,
+		symptom: symptom,
+		parent: nil,
+		children: make([]SymptomTreeNode, 0),
+		handler: handler,
+		leaf: false,
+	}
+	node.children = append([]SymptomTreeNode(nil), children...)
+	return &node
+}
+
 func (s *symptomTreeNode) Name() string {
 	return s.name
 }
