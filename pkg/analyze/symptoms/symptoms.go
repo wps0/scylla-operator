@@ -1,7 +1,10 @@
 package symptoms
 
 import (
+	"errors"
+	"fmt"
 	"github.com/scylladb/scylla-operator/pkg/analyze/snapshot"
+	"k8s.io/klog/v2"
 )
 
 const DefaultLimit = 4
@@ -121,8 +124,8 @@ type SymptomTreeNode interface {
 	Handler() conditionHandler
 	IsLeaf() bool
 
-	Children() []SymptomTreeNode
-	AddChild(SymptomTreeNode)
+	Children() map[string]SymptomTreeNode
+	AddChild(SymptomTreeNode) error
 }
 
 type symptomTreeNode struct {
@@ -130,7 +133,7 @@ type symptomTreeNode struct {
 	parent *SymptomTreeNode
 	symptom Symptom
 	leaf bool
-	children []SymptomTreeNode
+	children map[string]SymptomTreeNode
 	handler conditionHandler
 }
 
@@ -150,7 +153,7 @@ func NewSymptomTreeNode(name string, symptom Symptom, handler conditionHandler) 
 		name: name,
 		symptom: symptom,
 		parent: nil,
-		children: make([]SymptomTreeNode, 0),
+		children: make(map[string]SymptomTreeNode),
 		handler: handler,
 		leaf: false,
 	}
@@ -161,11 +164,18 @@ func NewSymptomTreeNodeWithChildren(name string, symptom Symptom, handler condit
 		name: name,
 		symptom: symptom,
 		parent: nil,
-		children: make([]SymptomTreeNode, 0),
+		children: make(map[string]SymptomTreeNode),
 		handler: handler,
 		leaf: false,
 	}
-	node.children = append([]SymptomTreeNode(nil), children...)
+	
+	for _, c := range children{
+		err := node.AddChild(c)
+		if err != nil {
+			klog.Warningf("can't add child symptoms for set %s: %v, name, err")
+			return nil
+		}
+	}
 	return &node
 }
 
@@ -177,7 +187,7 @@ func (s *symptomTreeNode) Symptom() Symptom {
 	return s.symptom
 }
 
-func (s *symptomTreeNode) Children() []SymptomTreeNode {
+func (s *symptomTreeNode) Children() map[string]SymptomTreeNode {
 	return s.children
 }
 
@@ -197,11 +207,19 @@ func (s *symptomTreeNode) IsLeaf() bool{
 	return s.leaf
 }
 
-func (s *symptomTreeNode) AddChild(c SymptomTreeNode) {
-	s.children = append(s.children, c)
+func (s *symptomTreeNode) AddChild(c SymptomTreeNode) error{
+	if c == nil {
+		return errors.New("SymptomTreeNode is nil")
+	}
+	_, isIn := s.children[c.Name()]
+	if isIn {
+		return errors.New(fmt.Sprintf("symptom already exists: %v", c))
+	}
+	s.children[c.Name()] = c
 
 	var thisAsInterface SymptomTreeNode = s
 	c.SetParent(&thisAsInterface)
+	return nil
 }
 
 // Chyba useless
