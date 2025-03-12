@@ -1,10 +1,7 @@
 package symptoms
 
 import (
-	"errors"
-	"fmt"
 	"github.com/scylladb/scylla-operator/pkg/analyze/snapshot"
-	"k8s.io/klog/v2"
 )
 
 const DefaultLimit = 4
@@ -114,17 +111,6 @@ func (s *symptom) Match(ds snapshot.Snapshot) ([]Issue, error) {
 //	return m.symptoms
 //}
 
-type SymptomSet interface {
-	Name() string
-	Symptoms() map[string]*Symptom
-	DerivedSets() map[string]*SymptomSet
-	Parent() *SymptomSet
-	SetParent(*SymptomSet)
-
-	Add(*Symptom) error
-	AddChild(*SymptomSet) error
-}
-
 type conditionHandler func(*MatchWorkerPool, Symptom, int, chan JobStatus, chan JobStatus)
 
 type SymptomTreeNode interface {
@@ -139,13 +125,6 @@ type SymptomTreeNode interface {
 	AddChild(SymptomTreeNode)
 }
 
-type symptomSet struct {
-	name     string
-	parent   *SymptomSet
-	symptoms map[string]*Symptom
-	children map[string]*SymptomSet
-}
-
 type symptomTreeNode struct {
 	name string
 	parent *SymptomTreeNode
@@ -153,15 +132,6 @@ type symptomTreeNode struct {
 	leaf bool
 	children []SymptomTreeNode
 	handler conditionHandler
-}
-
-func NewEmptySymptomSet(name string) SymptomSet {
-	return &symptomSet{
-		name:     name,
-		parent:   nil,
-		symptoms: make(map[string]*Symptom),
-		children: make(map[string]*SymptomSet),
-	}
 }
 
 func NewSymptomTreeLeaf(name string, symptom Symptom) SymptomTreeNode{
@@ -186,52 +156,20 @@ func NewSymptomTreeNode(name string, symptom Symptom, handler conditionHandler) 
 	}
 }
 
-func NewSymptomSet(name string, children []*SymptomSet) SymptomSet {
-	ss := NewEmptySymptomSet(name)
-	for _, subset := range children {
-		err := ss.AddChild(subset)
-		if err != nil {
-			klog.Warningf("can't add child symptoms for set %s: %v", name, err)
-			return nil
-		}
-	}
-	return ss
-}
-
-func (s *symptomSet) Name() string {
-	return s.name
-}
-
 func (s *symptomTreeNode) Name() string {
 	return s.name
-}
-
-func (s *symptomSet) Symptoms() map[string]*Symptom {
-	return s.symptoms
 }
 
 func (s *symptomTreeNode) Symptom() Symptom {
 	return s.symptom
 }
 
-func (s *symptomSet) DerivedSets() map[string]*SymptomSet {
-	return s.children
-}
-
 func (s *symptomTreeNode) Children() []SymptomTreeNode {
 	return s.children
 }
 
-func (s *symptomSet) Parent() *SymptomSet {
-	return s.parent
-}
-
 func (s *symptomTreeNode) Parent() *SymptomTreeNode {
 	return s.parent
-}
-
-func (s *symptomSet) SetParent(parent *SymptomSet) {
-	s.parent = parent
 }
 
 func (s *symptomTreeNode) SetParent(parent *SymptomTreeNode){
@@ -244,33 +182,6 @@ func (s *symptomTreeNode) Handler() conditionHandler{
 
 func (s *symptomTreeNode) IsLeaf() bool{
 	return s.leaf
-}
-
-func (s *symptomSet) Add(ss *Symptom) error {
-	if ss == nil {
-		return errors.New("symptom is nil")
-	}
-	_, isIn := s.symptoms[(*ss).Name()]
-	if isIn {
-		return errors.New("symptom already exists")
-	}
-	s.symptoms[(*ss).Name()] = ss
-	return nil
-}
-
-func (s *symptomSet) AddChild(ss *SymptomSet) error {
-	if ss == nil {
-		return errors.New("symptomSet is nil")
-	}
-	_, isIn := s.children[(*ss).Name()]
-	if isIn {
-		return errors.New(fmt.Sprintf("symptom already exists: %v", ss))
-	}
-	s.children[(*ss).Name()] = ss
-
-	var thisAsInterface SymptomSet = s
-	(*ss).SetParent(&thisAsInterface)
-	return nil
 }
 
 func (s *symptomTreeNode) AddChild(c SymptomTreeNode) {

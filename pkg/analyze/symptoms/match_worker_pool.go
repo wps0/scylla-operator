@@ -53,21 +53,6 @@ func NewDefaultMatchWorkerPool(
 	}
 }
 
-func (w *MatchWorkerPool) EnqueueAll(symptoms *SymptomSet) int {
-	count := len((*symptoms).Symptoms())
-//	for _, s := range (*symptoms).Symptoms() {
-//		w.Enqueue(Job{
-//			Symptom: s,
-//		})
-//	}
-//
-//	for _, s := range (*symptoms).DerivedSets() {
-//		count += w.EnqueueAll(s)
-//	}
-	return count
-}
-
-
 func (w *MatchWorkerPool) EnqueueTree(root SymptomTreeNode, results chan JobStatus) {
 	if root.IsLeaf(){
 		w.EnqueueNode(root.Symptom(), results, nil)
