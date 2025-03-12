@@ -5,10 +5,11 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/scylladb/scylla-operator/pkg/analyze"
 	"github.com/scylladb/scylla-operator/pkg/analyze/snapshot"
 	scyllaversioned "github.com/scylladb/scylla-operator/pkg/client/scylla/clientset/versioned"
 	"github.com/scylladb/scylla-operator/pkg/genericclioptions"
-	soscheme "github.com/scylladb/scylla-operator/pkg/scheme"
+	scyllaScheme "github.com/scylladb/scylla-operator/pkg/scheme"
 	"github.com/scylladb/scylla-operator/pkg/version"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -135,25 +136,26 @@ func (o *AnalyzeOptions) Run(streams genericclioptions.IOStreams, cmd *cobra.Com
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	var clusterSnapshot snapshot.Snapshot
 	var err error
 	if len(o.ArchivePath) > 0 {
 		var codecFactory serializer.CodecFactory
 		if o.DisableStrictEncoding {
-			codecFactory = serializer.NewCodecFactory(soscheme.Scheme, serializer.DisableStrict)
+			codecFactory = serializer.NewCodecFactory(scyllaScheme.Scheme, serializer.DisableStrict)
 		} else {
-			codecFactory = serializer.NewCodecFactory(soscheme.Scheme, serializer.EnableStrict)
+			codecFactory = serializer.NewCodecFactory(scyllaScheme.Scheme, serializer.EnableStrict)
 		}
 		fs := os.DirFS(o.ArchivePath)
-		_, err = snapshot.NewSnapshotFromFS(fs, codecFactory.UniversalDeserializer())
+		clusterSnapshot, err = snapshot.NewSnapshotFromFS(fs, codecFactory.UniversalDeserializer())
 		if err != nil {
 			return fmt.Errorf("can't build data source from must-gather: %w", err)
 		}
 	} else {
-		_, err = snapshot.NewSnapshotFromListers(ctx, o.kubeClient, o.scyllaClient)
+		clusterSnapshot, err = snapshot.NewSnapshotFromListers(ctx, o.kubeClient, o.scyllaClient)
 		if err != nil {
 			return fmt.Errorf("can't build data source from clients: %w", err)
 		}
 	}
 
-	return nil
+	return analyze.Analyze(ctx, clusterSnapshot)
 }
