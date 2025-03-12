@@ -15,7 +15,7 @@ var SymptomTests = []symptoms.SymptomTreeNode{
 }
 
 func init() {
-	for _, s := range symptomSlices{
+	for _, s := range symptomSlices {
 		Symptoms = append(Symptoms, s...)
 	}
 }

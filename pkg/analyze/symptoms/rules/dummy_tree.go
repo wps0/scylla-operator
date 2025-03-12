@@ -5,19 +5,19 @@ import (
 	"github.com/scylladb/scylla-operator/pkg/analyze/symptoms"
 )
 
-func trueSelector(ss snapshot.Snapshot) []map[string]any{
+func trueSelector(ss snapshot.Snapshot) []map[string]any {
 	s := make([]map[string]any, 0)
 	m := make(map[string]any)
-	m["true"]="true"
+	m["true"] = "true"
 	s = append(s, m)
 	return s
 }
 
-func falseSelector(ss snapshot.Snapshot) []map[string]any{
+func falseSelector(ss snapshot.Snapshot) []map[string]any {
 	return make([]map[string]any, 0)
 }
 
-var	trueSymptom = symptoms.NewSymptom("true", "", "", trueSelector)
+var trueSymptom = symptoms.NewSymptom("true", "", "", trueSelector)
 var falseSymptom = symptoms.NewSymptom("false", "", "", falseSelector)
 
 func OrTestTree() symptoms.SymptomTreeNode {

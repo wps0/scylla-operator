@@ -120,7 +120,7 @@ type SymptomTreeNode interface {
 	Name() string
 	Symptom() Symptom
 	Parent() *SymptomTreeNode
-	SetParent(*SymptomTreeNode) 
+	SetParent(*SymptomTreeNode)
 	Handler() conditionHandler
 	IsLeaf() bool
 
@@ -129,47 +129,47 @@ type SymptomTreeNode interface {
 }
 
 type symptomTreeNode struct {
-	name string
-	parent *SymptomTreeNode
-	symptom Symptom
-	leaf bool
+	name     string
+	parent   *SymptomTreeNode
+	symptom  Symptom
+	leaf     bool
 	children map[string]SymptomTreeNode
-	handler conditionHandler
+	handler  conditionHandler
 }
 
-func NewSymptomTreeLeaf(name string, symptom Symptom) SymptomTreeNode{
+func NewSymptomTreeLeaf(name string, symptom Symptom) SymptomTreeNode {
 	return &symptomTreeNode{
-		name: name,
-		symptom: symptom,
-		parent: nil,
+		name:     name,
+		symptom:  symptom,
+		parent:   nil,
 		children: nil,
-		handler: nil,
-		leaf: true,
+		handler:  nil,
+		leaf:     true,
 	}
 }
 
 func NewSymptomTreeNode(name string, symptom Symptom, handler conditionHandler) SymptomTreeNode {
 	return &symptomTreeNode{
-		name: name,
-		symptom: symptom,
-		parent: nil,
+		name:     name,
+		symptom:  symptom,
+		parent:   nil,
 		children: make(map[string]SymptomTreeNode),
-		handler: handler,
-		leaf: false,
+		handler:  handler,
+		leaf:     false,
 	}
 }
 
-func NewSymptomTreeNodeWithChildren(name string, symptom Symptom, handler conditionHandler, children ...SymptomTreeNode) SymptomTreeNode{
+func NewSymptomTreeNodeWithChildren(name string, symptom Symptom, handler conditionHandler, children ...SymptomTreeNode) SymptomTreeNode {
 	node := symptomTreeNode{
-		name: name,
-		symptom: symptom,
-		parent: nil,
+		name:     name,
+		symptom:  symptom,
+		parent:   nil,
 		children: make(map[string]SymptomTreeNode),
-		handler: handler,
-		leaf: false,
+		handler:  handler,
+		leaf:     false,
 	}
-	
-	for _, c := range children{
+
+	for _, c := range children {
 		err := node.AddChild(c)
 		if err != nil {
 			klog.Warningf("can't add child symptoms for set %s: %v, name, err")
@@ -195,19 +195,19 @@ func (s *symptomTreeNode) Parent() *SymptomTreeNode {
 	return s.parent
 }
 
-func (s *symptomTreeNode) SetParent(parent *SymptomTreeNode){
+func (s *symptomTreeNode) SetParent(parent *SymptomTreeNode) {
 	s.parent = parent
 }
 
-func (s *symptomTreeNode) Handler() conditionHandler{
+func (s *symptomTreeNode) Handler() conditionHandler {
 	return s.handler
 }
 
-func (s *symptomTreeNode) IsLeaf() bool{
+func (s *symptomTreeNode) IsLeaf() bool {
 	return s.leaf
 }
 
-func (s *symptomTreeNode) AddChild(c SymptomTreeNode) error{
+func (s *symptomTreeNode) AddChild(c SymptomTreeNode) error {
 	if c == nil {
 		return errors.New("SymptomTreeNode is nil")
 	}
@@ -223,28 +223,28 @@ func (s *symptomTreeNode) AddChild(c SymptomTreeNode) error{
 }
 
 // Chyba useless
-func TrueCondition(w *MatchWorkerPool, symptom Symptom, children int, recv chan JobStatus, send chan JobStatus){
+func TrueCondition(w *MatchWorkerPool, symptom Symptom, children int, recv chan JobStatus, send chan JobStatus) {
 	w.EnqueueNode(symptom, send, nil)
-	for _ = range(children){
-		_ = <- recv
+	for range children {
+		_ = <-recv
 	}
 	close(recv)
 }
 
-func OrConditionPropagateFirst(w *MatchWorkerPool, symptom Symptom, children int, recv chan JobStatus, send chan JobStatus){
+func OrConditionPropagateFirst(w *MatchWorkerPool, symptom Symptom, children int, recv chan JobStatus, send chan JobStatus) {
 	enqueued := false
-	for i := 0; i<children; i++{
-		jobStatus := <- recv
-		if jobStatus.matched() && !enqueued{
+	for i := 0; i < children; i++ {
+		jobStatus := <-recv
+		if jobStatus.matched() && !enqueued {
 			w.EnqueueNode(symptom, send, jobStatus.Issues)
 			enqueued = true
 		}
 	}
 	if !enqueued {
 		send <- JobStatus{
-			Job: nil,
-			Error: nil,
-			Issues: make([]Issue, 0),
+			Job:       nil,
+			Error:     nil,
+			Issues:    make([]Issue, 0),
 			SubIssues: make([]Issue, 0),
 		}
 	}
@@ -252,23 +252,23 @@ func OrConditionPropagateFirst(w *MatchWorkerPool, symptom Symptom, children int
 	close(recv)
 }
 
-func OrConditionPropagateAll(w *MatchWorkerPool, symptom Symptom, children int, recv chan JobStatus, send chan JobStatus){
+func OrConditionPropagateAll(w *MatchWorkerPool, symptom Symptom, children int, recv chan JobStatus, send chan JobStatus) {
 	matched := false
 	subIssues := make([]Issue, 0)
-	for i := 0; i<children; i++{
-		jobStatus := <- recv
+	for i := 0; i < children; i++ {
+		jobStatus := <-recv
 		subIssues = append(subIssues, jobStatus.Issues...)
 		if jobStatus.matched() {
 			matched = true
 		}
 	}
-	if matched{
+	if matched {
 		w.EnqueueNode(symptom, send, subIssues)
-	}else{
+	} else {
 		send <- JobStatus{
-			Job: nil,
-			Error: nil,
-			Issues: make([]Issue, 0),
+			Job:       nil,
+			Error:     nil,
+			Issues:    make([]Issue, 0),
 			SubIssues: make([]Issue, 0),
 		}
 	}
@@ -276,13 +276,13 @@ func OrConditionPropagateAll(w *MatchWorkerPool, symptom Symptom, children int, 
 	close(recv)
 }
 
-func AndCondition(w *MatchWorkerPool, symptom Symptom, children int, recv chan JobStatus, send chan JobStatus){
+func AndCondition(w *MatchWorkerPool, symptom Symptom, children int, recv chan JobStatus, send chan JobStatus) {
 	msgSend := false
 	subIssues := make([]Issue, 0)
-	for i :=0; i<children; i++{
-		jobStatus := <- recv
+	for i := 0; i < children; i++ {
+		jobStatus := <-recv
 		subIssues = append(subIssues, jobStatus.Issues...)
-		if !jobStatus.matched() && !msgSend{
+		if !jobStatus.matched() && !msgSend {
 			jobStatus.SubIssues = append(jobStatus.Issues, jobStatus.SubIssues...)
 			jobStatus.Issues = make([]Issue, 0)
 			send <- jobStatus
@@ -292,6 +292,6 @@ func AndCondition(w *MatchWorkerPool, symptom Symptom, children int, recv chan J
 	if !msgSend {
 		w.EnqueueNode(symptom, send, subIssues)
 	}
-	
+
 	close(recv)
 }

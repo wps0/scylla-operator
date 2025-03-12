@@ -2,13 +2,13 @@ package analyze
 
 import (
 	"context"
+	"fmt"
 	"github.com/scylladb/scylla-operator/pkg/analyze/front"
 	"github.com/scylladb/scylla-operator/pkg/analyze/snapshot"
 	"github.com/scylladb/scylla-operator/pkg/analyze/symptoms"
 	"github.com/scylladb/scylla-operator/pkg/analyze/symptoms/rules"
 	"k8s.io/klog/v2"
 	"runtime"
-	"fmt"
 )
 
 func Analyze(ctx context.Context, ds snapshot.Snapshot) error {
@@ -19,10 +19,10 @@ func Analyze(ctx context.Context, ds snapshot.Snapshot) error {
 	defer matchWorkerPool.Finish()
 
 	/*
-	for _, tree := range rules.SymptomTests {
-		matchWorkerPool.EnqueueTree(tree, statusChan)
-	}
-	enqueued := len(rules.SymptomTests)
+		for _, tree := range rules.SymptomTests {
+			matchWorkerPool.EnqueueTree(tree, statusChan)
+		}
+		enqueued := len(rules.SymptomTests)
 	*/
 
 	for _, tree := range rules.Symptoms {
