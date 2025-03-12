@@ -80,26 +80,3 @@ func (s *Selector) Where(name string, lambda any) *Selector {
 
 	return s
 }
-
-type Dummy struct{}
-
-// Constructs a Selector which returns a slice of matches
-func (s *Selector) Collect() *Dummy {
-	// TODO: Implement
-
-	return &Dummy{}
-}
-
-// Constructs a Selector which returns a slice of at most limit matches
-func (s *Selector) Take(limit int) *Dummy {
-	// TODO: Implement
-
-	return &Dummy{}
-}
-
-// Constructs a Selector which calls callback for every match
-func (s *Selector) ForEach(callback func(map[string]any) (bool, error)) *Dummy {
-	// TODO: Implement
-
-	return &Dummy{}
-}

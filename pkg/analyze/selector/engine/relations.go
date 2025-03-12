@@ -36,6 +36,10 @@ func (r *Relations) List() []string {
 	return slices.Collect(maps.Keys(r.types))
 }
 
+func (r *Relations) Resources() map[string]reflect.Type {
+	return r.types
+}
+
 func (r Relations) Relate(relation Relation) bool {
 	if relation == nil {
 		return false
