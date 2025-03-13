@@ -9,10 +9,10 @@ var symptomSlices = [][]symptoms.SymptomTreeNode{
 
 var Symptoms []symptoms.SymptomTreeNode
 
-var SymptomTests = []symptoms.SymptomTreeNode{
-	OrTestTree(),
-	AndTestTree(),
-}
+//var SymptomTests = []symptoms.SymptomTreeNode{
+//	OrTestTree(),
+//	AndTestTree(),
+//}
 
 func init() {
 	for _, s := range symptomSlices {

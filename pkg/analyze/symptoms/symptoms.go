@@ -3,6 +3,7 @@ package symptoms
 import (
 	"errors"
 	"fmt"
+	"github.com/scylladb/scylla-operator/pkg/analyze/selector"
 	"github.com/scylladb/scylla-operator/pkg/analyze/snapshot"
 	"k8s.io/klog/v2"
 )
@@ -20,10 +21,10 @@ type symptom struct {
 	name        string
 	diagnoses   []string
 	suggestions []string
-	selector    func(snapshot.Snapshot) []map[string]any
+	selector    *selector.Selector
 }
 
-func NewSymptom(name string, diag string, suggestions string, selector func(snapshot.Snapshot) []map[string]any) Symptom {
+func NewSymptom(name string, diag string, suggestions string, selector *selector.Selector) Symptom {
 	return &symptom{
 		name:        name,
 		diagnoses:   []string{diag},
@@ -44,75 +45,30 @@ func (s *symptom) Suggestions() []string {
 	return s.suggestions
 }
 
-func (s *symptom) Match(ds snapshot.Snapshot) ([]Issue, error) {
-	res := s.selector(ds)
-	if res != nil && len(res) > 0 {
-		issues := make([]Issue, len(res))
+func (s *symptom) Match(ss snapshot.Snapshot) ([]Issue, error) {
+	collector, err := selector.NewCollector(ss, s.selector)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := collector.Take(DefaultLimit)
+	if err != nil {
+		return nil, err
+	}
+
+	if res != nil && len(*res) > 0 {
+		issues := make([]Issue, len(*res))
 
 		var sym Symptom = s
-		for i, r := range res {
+		for i, r := range *res {
 			issues[i] = NewIssue(&sym, r)
 		}
 
 		return issues, nil
 	}
+
 	return nil, nil
 }
-
-//type AndSymptom interface {
-//	Symptom
-//	SubSymptoms() []*Symptom
-//}
-//
-//type multiSymptom struct {
-//	name     string
-//	symptoms []*Symptom
-//	selector func(*snapshot.DataSource) (bool, error)
-//}
-//
-//func NewMultiSymptom(name string, symptoms []*Symptom) AndSymptom {
-//	return &multiSymptom{
-//		name:     name,
-//		symptoms: symptoms,
-//		selector: func(_ *snapshot.DataSource) (bool, error) { panic("not implemented :(") },
-//	}
-//}
-//
-//func (m *multiSymptom) Name() string {
-//	return m.name
-//}
-//
-//func (m *multiSymptom) Diagnoses() []string {
-//	diagnoses := make([]string, 0)
-//	for _, sym := range m.symptoms {
-//		diagnoses = append(diagnoses, (*sym).Diagnoses()...)
-//	}
-//	return diagnoses
-//}
-//
-//func (m *multiSymptom) Suggestions() []string {
-//	suggestions := make([]string, 0)
-//	for _, sym := range m.symptoms {
-//		suggestions = append(suggestions, (*sym).Suggestions()...)
-//	}
-//	return suggestions
-//}
-//
-//func (m *multiSymptom) Match(ds *snapshot.DataSource) ([]front.Diagnosis, error) {
-//	match, err := m.selector(ds)
-//	if err != nil {
-//		return nil, err
-//	}
-//	if match {
-//		// TODO: construct diagnosis
-//		return make([]front.Diagnosis, 0), nil
-//	}
-//	return nil, nil
-//}
-//
-//func (m *multiSymptom) SubSymptoms() []*Symptom {
-//	return m.symptoms
-//}
 
 type conditionHandler func(*MatchWorkerPool, Symptom, int, chan JobStatus, chan JobStatus)
 
@@ -172,7 +128,7 @@ func NewSymptomTreeNodeWithChildren(name string, symptom Symptom, handler condit
 	for _, c := range children {
 		err := node.AddChild(c)
 		if err != nil {
-			klog.Warningf("can't add child symptoms for set %s: %v, name, err")
+			klog.Warningf("can't add child symptoms for set %s: %v", name, err)
 			return nil
 		}
 	}

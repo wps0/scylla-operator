@@ -28,7 +28,7 @@ func NewCollector(ss snapshot.Snapshot, selector *Selector) (Collector, error) {
 		if selector.nilable[name] {
 			values[name] = []any{nil}
 		} else {
-			filter, err := engine.NewPredicate("o", func(o any) bool { return true })
+			filter, err := engine.NewPredicate("o", func(o any) (bool, error) { return true, nil })
 			if err != nil {
 				return nil, fmt.Errorf("failed to create identity filter: %w", err)
 			}

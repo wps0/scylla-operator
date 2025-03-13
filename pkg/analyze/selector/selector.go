@@ -17,7 +17,11 @@ func Type[T any]() reflect.Type {
 }
 
 func New() *Selector {
-	return &Selector{relations: engine.NewRelations()}
+	return &Selector{
+		relations: engine.NewRelations(),
+		filter:    make(map[string]*engine.Predicate),
+		nilable:   make(map[string]bool),
+	}
 }
 
 func Select(name string, typ reflect.Type, filter any) *Selector {

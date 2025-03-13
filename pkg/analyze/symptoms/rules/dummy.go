@@ -1,7 +1,7 @@
 package rules
 
 import (
-	"github.com/scylladb/scylla-operator/pkg/analyze/selectors"
+	"github.com/scylladb/scylla-operator/pkg/analyze/selector"
 	"github.com/scylladb/scylla-operator/pkg/analyze/symptoms"
 	scyllav1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1"
 )
@@ -12,10 +12,7 @@ var DummySymptoms = []symptoms.SymptomTreeNode{
 
 func buildBasicDummySymptoms() symptoms.SymptomTreeNode {
 	emptyCluster := symptoms.NewSymptom("cluster", "cluster diagnosis", "cluster suggestion",
-		selectors.
-			Select("cluster", selectors.Type[*scyllav1.ScyllaCluster]()).
-			Filter("cluster", func(c *scyllav1.ScyllaCluster) bool { return c != nil }).
-			Collect(symptoms.DefaultLimit))
+		selector.Select("cluster", selector.Type[*scyllav1.ScyllaCluster](), nil))
 	basicNode := symptoms.NewSymptomTreeLeaf("basic", emptyCluster)
 
 	return basicNode
