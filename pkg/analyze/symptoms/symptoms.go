@@ -24,13 +24,17 @@ type symptom struct {
 	selector    *selector.Selector
 }
 
-func NewSymptom(name string, diag string, suggestions string, selector *selector.Selector) Symptom {
+func NewSymptomWithManyDiagSug(name string, diagnoses []string, suggestions []string, selector *selector.Selector) Symptom {
 	return &symptom{
 		name:        name,
-		diagnoses:   []string{diag},
-		suggestions: []string{suggestions},
+		diagnoses:   diagnoses,
+		suggestions: suggestions,
 		selector:    selector,
 	}
+}
+
+func NewSymptom(name string, diag string, suggestions string, selector *selector.Selector) Symptom {
+	return NewSymptomWithManyDiagSug(name, []string{diag}, []string{suggestions}, selector)
 }
 
 func (s *symptom) Name() string {
