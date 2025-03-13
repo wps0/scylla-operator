@@ -3,12 +3,13 @@ package analyze
 import (
 	"context"
 	"fmt"
+	"runtime"
+
 	"github.com/scylladb/scylla-operator/pkg/analyze/front"
 	"github.com/scylladb/scylla-operator/pkg/analyze/snapshot"
 	"github.com/scylladb/scylla-operator/pkg/analyze/symptoms"
 	"github.com/scylladb/scylla-operator/pkg/analyze/symptoms/rules"
 	"k8s.io/klog/v2"
-	"runtime"
 )
 
 func Analyze(ctx context.Context, ds snapshot.Snapshot) error {
@@ -41,7 +42,7 @@ func Analyze(ctx context.Context, ds snapshot.Snapshot) error {
 			if status.Issues != nil {
 				fmt.Println("Main issue:")
 				for _, issue := range status.Issues {
-					err := front.Print([]front.Diagnosis{front.NewDiagnosis(issue.Symptom, issue.Resources)})
+					err := front.Print(issue, false)
 					if err != nil {
 						klog.Warningf("can't print diagnosis: %v", err)
 					}
@@ -50,7 +51,7 @@ func Analyze(ctx context.Context, ds snapshot.Snapshot) error {
 			if status.SubIssues != nil {
 				fmt.Println("Sub Issues:")
 				for _, issue := range status.SubIssues {
-					err := front.Print([]front.Diagnosis{front.NewDiagnosis(issue.Symptom, issue.Resources)})
+					err := front.Print(issue, true)
 					if err != nil {
 						klog.Warningf("can't print diagnosis: %v", err)
 					}
